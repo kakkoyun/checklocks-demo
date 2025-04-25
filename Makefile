@@ -19,13 +19,13 @@ install-vettool:
 # Run go vet with the checklocks analyzer
 # Ensure the vet tool is installed first.
 lint: install-vettool
-	@echo "Running checklocks linter..."
-	@go vet -vettool=$(VETTOOL) ./...
+	@echo "Running checklocks linter with debug tag..."
+	@go vet -vettool=$(VETTOOL) -tags debug ./...
 
 # Run tests
 test:
-	@echo "Running tests with race detector and timeout..."
-	@go test -race -timeout 30s ./...
+	@echo "Running tests with race detector, timeout, and debug tag..."
+	@go test -race -timeout 30s -tags debug ./...
 
 # Clean build artifacts (optional)
 clean:

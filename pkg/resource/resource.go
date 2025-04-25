@@ -3,6 +3,8 @@ package resource
 import (
 	"sync"
 	"sync/atomic"
+
+	"github.com/trailofbits/go-mutexasserts"
 )
 
 // ProtectedResource demonstrates a resource with some fields guarded by a mutex.
@@ -275,6 +277,7 @@ func (pr *ProtectedResource) ForceExample() {
 // but we guarantee it externally.
 // +checklocksignore
 func (pr *ProtectedResource) helperCalledUnderLock() {
+	mutexasserts.AssertMutexLocked(&pr.mu)
 	// This direct access would normally be a violation, but the function
 	// is ignored by the analyzer.
 	pr.value = -10

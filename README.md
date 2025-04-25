@@ -16,6 +16,7 @@ To provide a clear, runnable example showcasing:
 6. How ignore/force annotations (`+checklocksignore`/`+checklocksforce`) modify the analysis.
 7. How the analyzer identifies incorrect usage (missing locks, missing atomic ops, incorrect acquire/release).
 8. The behavior and limitations of the analyzer, particularly regarding scope and the `+checklocksfail` annotation.
+9. How to complement `checklocks` with runtime assertions using `go-mutexasserts` for ignored functions.
 
 ## Findings & Key Behaviors Observed (Final)
 
@@ -31,8 +32,9 @@ To provide a clear, runnable example showcasing:
 * **`+checklocksfail` Annotation:** Confirmed useful only for asserting a violation *is* found on a specific line (e.g., calling an annotated function incorrectly), satisfying the annotation. Not effective for call sites of functions with internal-only violations or for acquire/release precondition violations.
 * **`go vet` Exit Code:** Fails if any violations are found.
 * **Runtime vs. Static:** Static analysis (like `checklocks`) is powerful for finding lock misuse based on annotations but cannot find all concurrency issues. Deadlocks or panics resulting from misuse (like incorrect acquire/release patterns) require runtime detection (e.g., using `-race` and `-timeout` during testing, or observing the panic). We skip tests known to deadlock or panic in this demo to allow the suite to complete.
+* **Runtime Assertions (Debug Builds):** The `github.com/trailofbits/go-mutexasserts` library is used to add runtime lock assertions (`mutexasserts.AssertMutexLocked`) inside functions where static analysis is bypassed (e.g., via `+checklocksignore`). These assertions check lock state dynamically but are only active when the code is built with the `debug` tag (`go build -tags debug`, `go test -tags debug`). This provides an extra layer of safety during development/testing for assumptions made when ignoring the static checker.
 
-This demo provides a comprehensive overview of the `checklocks` analyzer's capabilities and limitations.
+This demo provides a comprehensive overview of the `checklocks` analyzer's capabilities and limitations, along with a strategy for adding runtime checks.
 
 ## Annotated Linter Output
 
@@ -94,3 +96,44 @@ pkg/resource/resource.go:263:5: invalid field access, mu (&({param:pr}.mu)) must
 # - No error reported for call to setDataLocked in TestDirectCallToSetDataLocked due to `+checklocksfail`.
 
 ```
+
+## Usage
+
+1. **Install dependencies:**
+
+    ```bash
+    go mod tidy
+    ```
+
+2. **Install `checklocks` vet tool:**
+
+    ```bash
+    make install-vettool
+    ```
+
+3. **Run linter (finds expected violations):**
+
+    ```bash
+    # Note: The -tags debug flag enables runtime assertions (if any) during vet checks
+    # that might involve running code, though checklocks is static.
+    make lint
+    ```
+
+4. **Run tests (with race detector and debug assertions enabled):**
+
+    ```bash
+    # Note: The -tags debug flag enables the go-mutexasserts runtime checks.
+    make test
+    ```
+
+5. **Clean:**
+
+    ```bash
+    make clean
+    ```
+
+## Exploring the Code
+
+* `pkg/resource/resource.go`: Contains the `ProtectedResource` struct with various annotations and methods demonstrating correct/incorrect usage.
+* `pkg/resource/resource_test.go`: Contains test cases, including some using `+checklocksfail` to assert expected linter violations and others verifying `go-mutexasserts` behavior with the `debug` tag.
+* `Makefile`: Defines targets for installation, linting, testing, and cleaning.

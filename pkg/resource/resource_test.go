@@ -239,3 +239,37 @@ func TestChecklocksIgnoreOnFunction(t *testing.T) {
 	}
 	// Linter should not report errors for the access within helperCalledUnderLock
 }
+
+// --- Mutex Assertions Tests ---
+
+// TestHelperUnderLockAssertionCorrect tests that calling the helper correctly
+// (with lock held) does NOT trigger the mutex assertion when built with -tags debug.
+func TestHelperUnderLockAssertionCorrect(t *testing.T) {
+	// This test relies on the 'debug' build tag being active
+	// during 'go test -tags debug'. If the tag is not present,
+	// the assertion function is a no-op.
+	pr := newTestResource()
+	pr.CallHelperUnderLockCorrectly() // This should NOT exit/panic
+
+	// Check the side effect to be sure it ran
+	pr.mu.Lock()
+	val := pr.value
+	pr.mu.Unlock()
+	if val != -10 {
+		t.Errorf("Expected value -10 after CallHelperUnderLockCorrectly, got %d", val)
+	}
+}
+
+// TestHelperUnderLockAssertionIncorrect tests that calling the helper directly
+// (without lock held) *would* trigger the mutex assertion (exit(1))
+// when built with -tags debug.
+// Running this test directly with 'go test -run TestHelperUnderLockAssertionIncorrect -tags debug'
+// is expected to fail and exit the test process.
+func TestHelperUnderLockAssertionIncorrect(t *testing.T) {
+	t.Skip("Skipping test: Expected to cause os.Exit(1) when run with -tags debug.")
+	// Uncomment the following lines to manually test the assertion failure:
+	// t.Log("Running TestHelperUnderLockAssertionIncorrect - EXPECTING EXIT")
+	// pr := newTestResource()
+	// pr.helperCalledUnderLock() // This call should trigger exit(1) with -tags debug
+	// t.Log("This line should NOT be reached if assertion fired.")
+}
