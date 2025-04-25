@@ -179,15 +179,13 @@ func (pr *ProtectedResource) WriteMixedCorrect(v int32) {
 
 // WriteMixedIncorrectAtomicOnly writes a mixed field atomically *without* the lock.
 func (pr *ProtectedResource) WriteMixedIncorrectAtomicOnly(v int32) {
-	// Error: Lock 'pr.mu' is not held for write to mixed field 'mixedValue'.
-	atomic.StoreInt32(&pr.mixedValue, v)
+	atomic.StoreInt32(&pr.mixedValue, v) // Error: Lock 'pr.mu' is not held for write to mixed field 'mixedValue'.
 }
 
 // WriteMixedIncorrectLockOnly writes a mixed field *directly* while holding the lock.
 func (pr *ProtectedResource) WriteMixedIncorrectLockOnly(v int32) {
 	pr.mu.Lock()
-	// Error: Field 'mixedValue' requires atomic access for writes.
-	pr.mixedValue = v
+	pr.mixedValue = v // Error: Field 'mixedValue' requires atomic access for writes.
 	pr.mu.Unlock()
 }
 
@@ -268,4 +266,23 @@ func (pr *ProtectedResource) ForceExample() {
 
 	// If the force worked, this subsequent access should NOT be reported as an error.
 	pr.description = "forced"
+}
+
+// --- Ignore Example for Internal Violation ---
+
+// helperCalledUnderLock is intended to ONLY be called when pr.mu is held.
+// We use +checklocksignore because the analyzer can't know this context,
+// but we guarantee it externally.
+// +checklocksignore
+func (pr *ProtectedResource) helperCalledUnderLock() {
+	// This direct access would normally be a violation, but the function
+	// is ignored by the analyzer.
+	pr.value = -10
+}
+
+// CallHelperUnderLockCorrectly demonstrates calling the ignored helper correctly.
+func (pr *ProtectedResource) CallHelperUnderLockCorrectly() {
+	pr.mu.Lock()
+	pr.helperCalledUnderLock()
+	pr.mu.Unlock()
 }

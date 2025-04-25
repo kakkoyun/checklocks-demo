@@ -224,3 +224,18 @@ func TestForce(t *testing.T) {
 		t.Errorf("ForceExample second write did not seem to happen: expected desc 'forced', got '%s'", desc)
 	}
 }
+
+// --- Test for +checklocksignore on helper ---
+
+func TestChecklocksIgnoreOnFunction(t *testing.T) {
+	pr := newTestResource()
+	initialVal, _ := pr.GetData()
+
+	pr.CallHelperUnderLockCorrectly() // Calls helper that violates internally but is ignored
+
+	finalVal, _ := pr.GetData() // Read back value to ensure helper ran
+	if finalVal != -10 {        // -10 is set by helperCalledUnderLock
+		t.Errorf("CallHelperUnderLockCorrectly failed: expected value -10, got %d (initial %d)", finalVal, initialVal)
+	}
+	// Linter should not report errors for the access within helperCalledUnderLock
+}
