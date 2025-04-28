@@ -30,6 +30,11 @@ To provide a clear, runnable example showcasing:
   * `+checklocksforce: lock` tells the analyzer to assume `lock` is held from that point onwards; it suppresses subsequent errors but can lead to warnings if the function exits with the lock seemingly held (as shown by the "return with unexpected locks held" warning). Also use with caution.
 * **Scope/Call Site Analysis:** Still primarily checks call site preconditions only if the called function is annotated. It does not deeply analyze unannotated functions when checking callers.
 * **`+checklocksfail` Annotation:** Confirmed useful only for asserting a violation *is* found on a specific line (e.g., calling an annotated function incorrectly), satisfying the annotation. Not effective for call sites of functions with internal-only violations or for acquire/release precondition violations.
+* **Generics Support (Partial):**
+  * **Real Violations:** The analyzer *does* correctly detect actual lock violations (`+checklocks`, `+checklocksread`, `+checkatomic`, etc.) in code using generics.
+  * **False Positives:** It produces spurious warnings like `may require checklocks annotation for mu, used with lock held 100% of the time` for the mutex fields themselves within generic types. This appears to be a false positive specific to generics, as it doesn't occur for equivalent non-generic code.
+  * **Test Annotation (`+checklocksfail`):** The `+checklocksfail` annotation used in tests does *not* seem to correctly identify expected violations when used with generic code, leading to test failures (e.g., `got 0 failures, want 1 failures`).
+  * **Upstream Issue:** An issue has been opened to track this: [https://github.com/google/gvisor/issues/11671](https://github.com/google/gvisor/issues/11671)
 * **`go vet` Exit Code:** Fails if any violations are found.
 * **Runtime vs. Static:** Static analysis (like `checklocks`) is powerful for finding lock misuse based on annotations but cannot find all concurrency issues. Deadlocks or panics resulting from misuse (like incorrect acquire/release patterns) require runtime detection (e.g., using `-race` and `-timeout` during testing, or observing the panic). We skip tests known to deadlock or panic in this demo to allow the suite to complete.
 * **Runtime Assertions (Debug Builds):** The `github.com/trailofbits/go-mutexasserts` library is used to add runtime lock assertions (`mutexasserts.AssertMutexLocked`) inside functions where static analysis is bypassed (e.g., via `+checklocksignore`). These assertions check lock state dynamically but are only active when the code is built with the `debug` tag (`go build -tags debug`, `go test -tags debug`). This provides an extra layer of safety during development/testing for assumptions made when ignoring the static checker.
@@ -38,7 +43,7 @@ This demo provides a comprehensive overview of the `checklocks` analyzer's capab
 
 ## Annotated Linter Output
 
-The following shows the expected output when running `make lint`. The violations reported are intentional demonstrations of the analyzer catching incorrect patterns described above. The exit code is non-zero, as expected for a linter finding issues.
+The following shows the expected output when running `make lint`. The violations reported are intentional demonstrations of the analyzer catching incorrect patterns described above, including some false positives related to generics. The exit code is non-zero, as expected for a linter finding issues.
 
 ```text
 # github.com/kakkoyun/checklocks-demo/pkg/resource
@@ -90,6 +95,17 @@ pkg/resource/resource.go:263:5: invalid field access, mu (&({param:pr}.mu)) must
 -: return with unexpected locks held (locks: &({param:pr}.mu) exclusively)
 #   [Reason: The `+checklocksforce: pr.mu` in ForceExample told the analyzer `mu` was held, but it was never released, so the analyzer thinks the function returns holding the lock.]
 
+# --- Generic Resource Violations (pkg/genericresource) ---
+# github.com/kakkoyun/checklocks-demo/pkg/genericresource
+# [github.com/kakkoyun/checklocks-demo/pkg/genericresource]
+pkg/genericresource/generic.go:15:2: may require checklocks annotation for mu, used with lock held 100% of the time
+#   [Reason: False positive warning specific to generics. See https://github.com/google/gvisor/issues/11671]
+pkg/genericresource/generic.go:23:2: may require checklocks annotation for rwMu, used with lock held 100% of the time
+#   [Reason: False positive warning specific to generics. See https://github.com/google/gvisor/issues/11671]
+pkg/genericresource/generic.go:34:2: may require checklocks annotation for acquireReleaseMu, used with lock held 100% of the time
+#   [Reason: False positive warning specific to generics. See https://github.com/google/gvisor/issues/11671]
+# (Note: The analyzer correctly identifies real violations in generic code, similar to the non-generic examples above, but those are omitted here for brevity as they are covered by the original pkg/resource examples.)
+
 # --- Note: Ignored Violations ---
 # - No error reported for access within FunctionToIgnore due to `+checklocksignore`.
 # - No error reported for access after `+checklocksforce` in ForceExample.
@@ -136,4 +152,6 @@ pkg/resource/resource.go:263:5: invalid field access, mu (&({param:pr}.mu)) must
 
 * `pkg/resource/resource.go`: Contains the `ProtectedResource` struct with various annotations and methods demonstrating correct/incorrect usage.
 * `pkg/resource/resource_test.go`: Contains test cases, including some using `+checklocksfail` to assert expected linter violations and others verifying `go-mutexasserts` behavior with the `debug` tag.
+* `pkg/genericresource/generic.go`: Contains a generic version (`GenericResource[T]`) used to test the analyzer's behavior with generics.
+* `pkg/genericresource/generic_test.go`: Contains basic tests for the generic resource.
 * `Makefile`: Defines targets for installation, linting, testing, and cleaning.
